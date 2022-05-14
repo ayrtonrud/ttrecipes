@@ -27,9 +27,9 @@ from __future__ import (absolute_import, division,
 from future.builtins import range
 
 import numpy as np
-import tt
+import teneva
 import time
-import ttrecipes as tr
+# import ttrecipes as tr
 
 
 def truncated_svd(M, delta=None, eps=None, rmax=None, left_ortho=True, verbose=False):
@@ -133,7 +133,8 @@ def tt_svd(X, eps, rmax=np.iinfo(np.int32).max, verbose=False):
         M = np.reshape(M, (M.shape[0] * shape[n], M.shape[1] // shape[n]))
         cores.append(np.reshape(left, [left.shape[0] // shape[n - 1], shape[n - 1], left.shape[1]]))
     cores.append(np.reshape(M, [M.shape[0] // shape[N - 1], shape[N - 1], 1]))
-    return tt.vector.from_list(cores)
+#     return tt.vector.from_list(cores)
+    return cores
 
 
 def full(t, keep_end_ranks=False):
@@ -154,18 +155,18 @@ def full(t, keep_end_ranks=False):
     return result
 
 
-def round(t, eps, rmax=np.iinfo(np.int32).max, verbose=False):
-    N = t.d
-    shape = t.n
-    cores = tt.vector.to_list(t)
-    start = time.time()
-    tr.core.orthogonalize(cores, N-1)
-    if verbose:
-        print('Orthogonalization time:', time.time() - start)
-    delta = eps / np.sqrt(N - 1) * np.linalg.norm(cores[-1])
-    for mu in range(N-1, 0, -1):
-        M = tr.core.right_unfolding(cores[mu])
-        left, M = truncated_svd(M, delta=delta, rmax=rmax, left_ortho=False, verbose=verbose)
-        cores[mu] = np.reshape(M, [-1, shape[mu], cores[mu].shape[2]], order='F')
-        cores[mu-1] = np.einsum('ijk,kl', cores[mu-1], left, optimize=True)
-    return tt.vector.from_list(cores)
+# def round(t, eps, rmax=np.iinfo(np.int32).max, verbose=False):
+#     N = t.d
+#     shape = t.n
+#     cores = tt.vector.to_list(t)
+#     start = time.time()
+#     tr.core.orthogonalize(cores, N-1)
+#     if verbose:
+#         print('Orthogonalization time:', time.time() - start)
+#     delta = eps / np.sqrt(N - 1) * np.linalg.norm(cores[-1])
+#     for mu in range(N-1, 0, -1):
+#         M = tr.core.right_unfolding(cores[mu])
+#         left, M = truncated_svd(M, delta=delta, rmax=rmax, left_ortho=False, verbose=verbose)
+#         cores[mu] = np.reshape(M, [-1, shape[mu], cores[mu].shape[2]], order='F')
+#         cores[mu-1] = np.einsum('ijk,kl', cores[mu-1], left, optimize=True)
+#     return tt.vector.from_list(cores)
