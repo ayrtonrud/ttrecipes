@@ -28,11 +28,15 @@ from future.builtins import range
 
 import numpy as np
 import time
-import tt
+# import tt
+import teneva
 import scipy
 import scipy.sparse
+import sparse
+import util
+from util import nr
 
-import ttrecipes as tr
+#import ttrecipes as tr
 
 
 def substitution(Xs, ys, shape=None, x0=None, rmax=1, niters=10, verbose=False):
@@ -58,11 +62,13 @@ def substitution(Xs, ys, shape=None, x0=None, rmax=1, niters=10, verbose=False):
     P = Xs.shape[0]
     N = Xs.shape[1]
     if x0 is None:
-        x0 = tr.core.random_tt(shape, rmax)
+#         x0 = tr.core.random_tt(shape, rmax)
+        x0 = teneva.rand(shape, rmax)
 
     t = x0
     for iter in range(niters):
-        error = tr.core.sparse_reco(t, Xs) - ys
+#         error = tr.core.sparse_reco(t, Xs) - ys
+        error = sparse.sparse_reco(t, Xs) - ys
         if verbose:
             print("Error: {}".format(np.linalg.norm(error) / np.linalg.norm(ys)))
         cores = []
@@ -116,22 +122,27 @@ def categorical_ALS(Xs, ys, ws=None, shape=None, x0=None, ranks=1, nswp=10, verb
     if not hasattr(ranks, '__len__'):
         ranks = [1] + [ranks]*(N-1) + [1]
     if x0 is None:
-        x0 = tr.core.random_tt(shape, ranks)
+#         x0 = tr.core.random_tt(shape, ranks)
+        x0 = teneva.rand(shape, ranks)
     # All tensor slices must contain at least one sample point
+    n, r = nr(x0)
     for dim in range(N):
-        if np.unique(Xs[:, dim]).size != x0.n[dim]:
+#         if np.unique(Xs[:, dim]).size != x0.n[dim]:
+        if np.unique(Xs[:, dim]).size != n[dim]:
             raise ValueError('One groundtruth sample is needed for every tensor slice')
 
     if verbose:
         print('Completing a {}D tensor of size {} using {} samples...'.format(N, list(shape), P))
 
     normys = np.linalg.norm(ys)
-    cores = tt.vector.to_list(x0)
-    tr.core.orthogonalize(cores, 0)
+#     cores = tt.vector.to_list(x0)
+    cores = x0
+#     tr.core.orthogonalize(cores, 0)
+    util.orthogonalize(cores, 0)
 
     # Memoized product chains for all groundtruth points
     # lefts will be initialized on the go
-    lefts = [np.ones([1, P, x0.r[i]]) for i in range(N)]
+    lefts = [np.ones([1, P, r[i]]) for i in range(N)]
     # rights, however, needs to be initialized now
     rights = [None] * N
     rights[-1] = np.ones([1, P, 1])
@@ -155,10 +166,12 @@ def categorical_ALS(Xs, ys, ws=None, shape=None, x0=None, ranks=1, nswp=10, verb
             sse += residuals
         # Update product chains for next core
         if direction == 'right':
-            tr.core.left_orthogonalize(cores, mu)
+#             tr.core.left_orthogonalize(cores, mu)
+            util.left_orthogonalize(cores, mu)
             lefts[mu+1] = np.einsum('ijk,kjl->ijl', lefts[mu], cores[mu][:, Xs[:, mu], :])
         else:
-            tr.core.right_orthogonalize(cores, mu)
+#             tr.core.right_orthogonalize(cores, mu)
+            util.right_orthogonalize(cores, mu)
             rights[mu-1] = np.einsum('ijk,kjl->ijl', cores[mu][:, Xs[:, mu], :], rights[mu])
         return sse
 
@@ -179,7 +192,8 @@ def categorical_ALS(Xs, ys, ws=None, shape=None, x0=None, ranks=1, nswp=10, verb
         if verbose:
             print(" | eps: {}".format(np.sqrt(sse) / normys))
 
-    return tt.vector.from_list(cores)
+#     return tt.vector.from_list(cores)
+    return cores
 
 
 def pce_interpolation(Xs, ys, ws=None, shape=None, x0=None, ranks=None, ranks2=None, maxswp=50, solver='sparse',
@@ -216,20 +230,25 @@ def pce_interpolation(Xs, ys, ws=None, shape=None, x0=None, ranks=None, ranks2=N
     if not hasattr(ranks2, '__len__'):
         ranks2 = [ranks2]*N
     if x0 is None:
-        x0 = tr.core.random_tt(shape, ranks)
-    Us = tr.core.generate_bases('legendre', shape, ranks2)
+#         x0 = tr.core.random_tt(shape, ranks)
+        x0 = teneva.rand(shape, ranks)
+    Us = util.generate_bases('legendre', shape, ranks2)
     normys = np.linalg.norm(ys)
-    cores = tt.vector.to_list(x0)
+#     cores = tt.vector.to_list(x0)
+    cores = x0
     # for mu in range(N):
     #     cores[mu] = np.einsum('ijk,lj->ilk', cores[mu], Us[mu])  # Put cores in TT (not ETT) format
-    tr.core.orthogonalize(cores, 0)
-
+#     tr.core.orthogonalize(cores, 0)
+    util.orthogonalize(cores, 0)
+    
+    n, r = nr(x0)
     if verbose:
-        print('Interpolating a {}D tensor of size {} using {} samples and ranks {}...'.format(N, list(shape), P, [r for r in x0.r]))
+        print('Interpolating a {}D tensor of size {} using {} samples and ranks {}...'.format(N, list(shape), P, [r for r in r]))
 
     # Memoized product chains for all groundtruth points
     # lefts will be initialized on the go
-    lefts = [np.ones([1, P, x0.r[i]]) for i in range(N)]
+#     lefts = [np.ones([1, P, x0.r[i]]) for i in range(N)]
+    lefts = [np.ones([1, P, r[i]]) for i in range(N)]
     # rights, however, needs to be initialized now
     rights = [None] * N
     rights[-1] = np.ones([1, P, 1])
@@ -296,10 +315,12 @@ def pce_interpolation(Xs, ys, ws=None, shape=None, x0=None, ranks=None, ranks2=N
             cores[mu] = np.einsum('ijk,lj->ilk', cores[mu], Us[mu])  # Decompress this new core: ETT -> TT
         # Update product chains for next core
         if direction == 'right':
-            tr.core.left_orthogonalize(cores, mu)
+#             tr.core.left_orthogonalize(cores, mu)
+            util.left_orthogonalize(cores, mu)
             lefts[mu+1] = np.einsum('ijk,kjl->ijl', lefts[mu], cores[mu][:, Xs[:, mu], :])
         else:
-            tr.core.right_orthogonalize(cores, mu)
+#             tr.core.right_orthogonalize(cores, mu)
+            util.right_orthogonalize(cores, mu)
             rights[mu-1] = np.einsum('ijk,kjl->ijl', cores[mu][:, Xs[:, mu], :], rights[mu])
         return residual
 
@@ -329,7 +350,8 @@ def pce_interpolation(Xs, ys, ws=None, shape=None, x0=None, ranks=None, ranks2=N
             break
         lasteps = eps
 
-    return tt.vector.from_list(cores)
+#     return tt.vector.from_list(cores)
+    return cores
 
 
 def inverse_distance_weighting(Xs, ys, shape, p=2, **kwargs):

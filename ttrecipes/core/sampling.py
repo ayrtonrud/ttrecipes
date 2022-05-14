@@ -27,10 +27,10 @@ from __future__ import (absolute_import, division,
 from future.builtins import range
 
 import numpy as np
-import tt
+import teneva
 import scipy
 
-import ttrecipes as tr
+# import ttrecipes as tr
 
 
 def random_sampling(pdf, P=1):
@@ -56,10 +56,12 @@ def random_sampling(pdf, P=1):
         shiftand = np.logical_and(M[:, :-1] <= 0, M[:, 1:] > 0)  # Find where the sign switches
         return np.where(shiftand)[1]
 
-    N = pdf.d
+#     N = pdf.d
+    N = len(pdf)
     Xs = np.zeros([P, N])
     rights = [np.array([1])]
-    cores = tt.vector.to_list(pdf)
+#     cores = tt.vector.to_list(pdf)
+    cores = pdf
     for core in cores[::-1]:
         rights.append(np.dot(np.sum(core, axis=1), rights[-1]))
     rights = rights[::-1]

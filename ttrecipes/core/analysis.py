@@ -27,11 +27,14 @@ from __future__ import (absolute_import, division,
 from future.builtins import range
 
 import numpy as np
-import tt
-from tt.optimize import tt_min
+import teneva
+import tt_min
+import util
+from multifuncrs2 import multifuncrs2, nr
 import copy
+import masks
 
-import ttrecipes as tr
+#import ttrecipes as tr
 
 
 def best_subspace(t, ndim=1, target='max', mode='cross', eps=1e-6, verbose=False, **kwargs):
@@ -57,31 +60,39 @@ def best_subspace(t, ndim=1, target='max', mode='cross', eps=1e-6, verbose=False
 
     # Build up a tensor that contains variances of all possible subspaces of any dimensionality, using the formula E(X^2) - E(X)^2
     if mode == 'cross':
-        cores = tt.vector.to_list(tt.multifuncrs2([t], lambda x: x ** 2, eps=eps, verb=verbose, **kwargs))
+        cores = multifuncrs2([t], lambda x: x ** 2, eps=eps, verb=verbose, **kwargs)
     else:
         cores = tt.vector.to_list((t*t).round(0))
     cores = [np.concatenate([np.mean(core, axis=1, keepdims=True), core], axis=1) for core in cores]
-    part1 = tt.vector.from_list(cores)  # E(X^2)
+#     part1 = tt.vector.from_list(cores)  # E(X^2)
+    part1 = cores
 
-    cores = tt.vector.to_list(t)
+#     cores = tt.vector.to_list(t)
+    cores = t
     cores = [np.concatenate([np.mean(core, axis=1, keepdims=True), core], axis=1) for core in cores]
-    part2 = tt.vector.from_list(cores)
+#     part2 = tt.vector.from_list(cores)
+    part2 = cores
     if mode == 'cross':
-        part2 = tt.multifuncrs2([part2], lambda x: x ** 2, eps=eps, verb=verbose, **kwargs)
+        part2 = multifuncrs2([part2], lambda x: x ** 2, eps=eps, verb=verbose, **kwargs)
     else:
         part2 = (part2*part2).round(0)  # E(X)^2
 
-    variances = (part1 - part2).round(0)
+#     variances = (part1 - part2).round(0)
+    variances = teneva.truncate(teneva.sub(part1, part2), 0)
 
     # Filter out encoded subspaces that do not have the target dimensionality
-    mask = tt.vector.to_list(tr.core.hamming_eq_mask(t.d, t.d-ndim))
-    mask = [np.concatenate([core[:, 0:1, :], np.repeat(core[:, 1:, :], sh, axis=1)], axis=1) for core, sh in zip(mask, t.n)]
-    mask = tt.vector.from_list(mask)
+#     mask = tt.vector.to_list(tr.core.hamming_eq_mask(t.d, t.d-ndim))
+    mask = masks.hamming_eq_mask(len(t), len(t)-ndim)
+    n, r = nr(t)
+    mask = [np.concatenate([core[:, 0:1, :], np.repeat(core[:, 1:, :], sh, axis=1)], axis=1) for core, sh in zip(mask, n)]
+#     mask = tt.vector.from_list(mask)
+    mask = mask
 
     # Find and return the best candidate
     if target == 'max':
-        prod = tt.vector.round(variances*mask, eps=eps)
-        val, point = tt_min.min_tens(-prod, verb=verbose)
+        prod = teneva.truncate(teneva.mul(variances, mask), e=eps)
+#         val, point = tt_min.min_tens(-prod, verb=verbose)
+        val, point = tt_min.min_tens(teneva.mul(-1, prod), verb=verbose)
         val = -val
     else:
         shift = -1e3*tt_min.min_tens(-variances, verb=False, rmax=1)[0]
@@ -109,7 +120,8 @@ def moments(t, modes, order, centered=False, normalized=False, eps=1e-3, verbose
 
     """
 
-    N = t.d
+#     N = t.d
+    N = len(t)
     assert np.all(0 <= np.array(modes))
     assert np.all(np.array(modes) < N)
     if not hasattr(modes, '__len__'):
@@ -119,35 +131,44 @@ def moments(t, modes, order, centered=False, normalized=False, eps=1e-3, verbose
 
     if centered or normalized:
         central_cores = []
-        cores = tt.vector.to_list(t)
+        cores = t
+#         cores = tt.vector.to_list(t)
         for n in range(N):
             if n in modes:
                 central_cores.append(np.repeat(np.mean(cores[n], axis=1, keepdims=True), cores[n].shape[1], axis=1))
             else:
                 central_cores.append(cores[n])
-        central = t - tt.vector.from_list(central_cores)
+#         central = t - tt.vector.from_list(central_cores)
+        central = t - central_cores
     if centered:
         if order == 1:
             moments = copy.deepcopy(central)
         else:
-            moments = tt.multifuncrs2([central], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
+#             moments = tt.multifuncrs2([central], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
+            moments = multifuncrs2([central], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
     else:
         if order == 1:
             moments = copy.deepcopy(t)
         else:
-            moments = tt.multifuncrs2([t], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
-    cores = tt.vector.to_list(moments)
+#             moments = tt.multifuncrs2([t], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
+            moments = multifuncrs2([t], lambda x: x**order, eps=eps, verb=verbose, **kwargs)
+#     cores = tt.vector.to_list(moments)
+    cores = moments
     for mode in modes:
         cores[mode] = np.mean(cores[mode], axis=1, keepdims=True)
-    moments = tt.vector.from_list(cores)
+#     moments = tt.vector.from_list(cores)
+    moments = cores
     if normalized:
-        central = tt.multifuncrs2([central], lambda x: x**2, eps=eps, verb=verbose, **kwargs)
+#         central = tt.multifuncrs2([central], lambda x: x**2, eps=eps, verb=verbose, **kwargs)
+        central = multifuncrs2([central], lambda x: x**2, eps=eps, verb=verbose, **kwargs)
         cores = tt.vector.to_list(central)
         for mode in modes:
             cores[mode] = np.mean(cores[mode], axis=1, keepdims=True)
-        variances = tt.vector.from_list(cores)
-        moments = tt.multifuncrs2([moments, variances], lambda x: x[:, 0] / (x[:, 1] ** (order/2.)), eps=eps, verb=verbose, **kwargs)
-    return tr.core.squeeze(moments)
+#         variances = tt.vector.from_list(cores)
+        variances = cores
+#         moments = tt.multifuncrs2([moments, variances], lambda x: x[:, 0] / (x[:, 1] ** (order/2.)), eps=eps, verb=verbose, **kwargs)
+        moments = multifuncrs2([moments, variances], lambda x: x[:, 0] / (x[:, 1] ** (order/2.)), eps=eps, verb=verbose, **kwargs)
+    return util.squeeze(moments)
 
 
 def means(t, modes, **kwargs):

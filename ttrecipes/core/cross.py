@@ -24,9 +24,11 @@ from future.builtins import range
 
 import time
 import numpy as np
-import tt
+import teneva
+import util
+from multifuncrs2 import multifuncrs2
 
-import ttrecipes as tr
+# import ttrecipes as tr
 
 
 def cross(ticks_list, fun, mode="array", qtt=False, callback=None, return_n_samples=False, stats=False, eps=1e-3, verbose=False,
@@ -134,11 +136,11 @@ def cross(ticks_list, fun, mode="array", qtt=False, callback=None, return_n_samp
                 all_values.extend(list(values))
             return values
 
-    grids = tr.core.meshgrid(shape)
+    grids = util.meshgrid(shape)
     if verbose:
         print("Cross-approximating a {}D function with target error {}...".format(N, eps))
         start = time.time()
-    result = tt.multifuncrs2(grids, f, eps=eps, verb=verbose, **kwargs)
+    result = multifuncrs2(grids, f, eps=eps, verb=verbose, **kwargs)
     if verbose:
         total_time = time.time() - start
         print('Function evaluations: {} in {} seconds (time/evaluation: {})'.format(n_samples, total_time, total_time /
