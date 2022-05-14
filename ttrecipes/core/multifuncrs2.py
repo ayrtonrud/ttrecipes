@@ -7,6 +7,7 @@ import teneva
 from teneva import maxvol
 import copy
 from numpy import arange
+from util import nr
 
 
 def reshape(a, size):
@@ -24,13 +25,6 @@ def my_chop2(sv, eps):
     else:
         return np.amin(ff)
     
-def nr(ttx):
-    n =[]
-    r = [1]
-    for t in ttx:
-        n.append(t.shape[1])
-        r.append(t.shape[2])
-    return np.array(n),np.array(r)
 
 
 def multifuncrs2(X, funs, eps=1e-6,
