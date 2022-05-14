@@ -29,11 +29,21 @@ from future.builtins import range
 
 import numpy as np
 import copy
-import tt
+import teneva
 import scipy.interpolate
 import scipy.fftpack
 import scipy.sparse as sps
-import ttrecipes as tr
+
+#import ttrecipes as tr
+
+
+def nr(ttx):
+    n =[]
+    r = [1]
+    for t in ttx:
+        n.append(t.shape[1])
+        r.append(t.shape[2])
+    return np.array(n),np.array(r)
 
 
 def load(file, verbose=False):
@@ -247,6 +257,34 @@ def generate_laplacian(size, periodic=False):
         L[inds, inds+2] = 1
     return L
 
+def getitem(t,index):
+    running_fact = None
+    answ_cores = []
+    n,r = nr(t)
+    for i in range(len(t)):
+        cur_core = t[i]
+        cur_core = cur_core.reshape(
+            (r[i], n[i], r[i + 1]), order='F')
+        cur_core = cur_core[
+            :, index[i], :].reshape(
+            (r[i], -1), order='F')
+        if running_fact is None:
+            new_r0 = r[i]
+            cur_core = cur_core.copy()
+        else:
+            new_r0 = running_fact.shape[0]
+            cur_core = np.dot(running_fact, cur_core)
+        cur_core = cur_core.reshape((new_r0, -1, r[i + 1]), order='F')
+        if cur_core.shape[1] == 1:
+            running_fact = cur_core.reshape((new_r0, -1), order='F')
+        else:
+            answ_cores.append(cur_core)
+            running_fact = None
+    if len(answ_cores) == 0:
+        return running_fact[0, 0]
+    if running_fact is not None:
+        answ_cores[-1] = np.dot(answ_cores[-1], running_fact)
+    return answ_cores
 
 def ttm(core, U, mode, transpose=False):
     """
@@ -406,7 +444,6 @@ def insert_dummies(t, modes, shape=1):
 
     """
 
-    print(t)
     N = t.d
     if not hasattr(modes, '__len__'):
         modes = [modes]
@@ -451,12 +488,15 @@ def squeeze(t, modes=None):
     :param modes: which modes to delete. By default, all that have size 1
     :return: Another TT tensor, without dummy (singleton) indices
     """
-
+    n, r = nr(t)
     if modes is None:
-        modes = np.where(t.n == 1)[0]
-    assert np.all(t.n[modes] == 1)
+#         modes = np.where(t.n == 1)[0]
+        modes = np.where(n == 1)[0]
+#     assert np.all(t.n[modes] == 1)
+    assert np.all(n[modes] == 1)
 
-    cores = tt.vector.to_list(t)
+#     cores = tt.vector.to_list(t)
+    cores = t
     newcores = []
     curcore = None
     for mu in range(len(cores)):
@@ -478,7 +518,8 @@ def squeeze(t, modes=None):
             newcores[-1] = ttm(newcores[-1], curcore, mode=2, transpose=True)
         else:
             newcores.append(curcore)
-    return tt.vector.from_list(newcores)
+#     return tt.vector.from_list(newcores)
+    return newcores
 
 
 def choose(t, modes):
@@ -577,7 +618,8 @@ def meshgrid(xi):
     for dim in range(len(xi)):
         grid = [np.ones([1, len(ticks), 1], dtype=np.int) for ticks in ticks_list]
         grid[dim] = ticks_list[dim][np.newaxis, :, np.newaxis]
-        grids.append(tt.vector.from_list(grid))
+        #grids.append(tt.vector.from_list(grid))
+        grids.append(grid)
     return grids
 
 
@@ -591,7 +633,8 @@ def sum(t, modes=None, keepdims=False):
 
     """
 
-    N = t.d
+#     N = t.d
+    N = len(t)
     allsum = False
     if modes is None:
         allsum = True
@@ -599,12 +642,15 @@ def sum(t, modes=None, keepdims=False):
     if not hasattr(modes, '__len__'):
         modes = [modes]
 
-    cores = tt.vector.to_list(t)
+#     cores = tt.vector.to_list(t)
+    cores = t
     for n in modes:
         cores[n] = np.sum(cores[n], axis=1, keepdims=True)
-    t = tt.vector.from_list(cores)
+#     t = tt.vector.from_list(cores)
+    t = cores
     if allsum:
-        return np.asscalar(t.full())
+#         return np.asscalar(t.full())
+        return np.asscalar(teneva.full(t))
     else:
         if keepdims:
             return t
