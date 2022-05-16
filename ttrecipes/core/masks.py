@@ -26,7 +26,7 @@ from __future__ import (absolute_import, division,
                         print_function, unicode_literals)
 
 import numpy as np
-import tt
+import teneva
 
 
 def hamming_weight(N):
@@ -47,7 +47,7 @@ def hamming_weight(N):
     core = np.ones([N, 2, 1])
     core[N - 1, 0, 0] = 0
     cores.append(core)
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def hamming_weight_state(N):
@@ -75,7 +75,7 @@ def hamming_weight_state(N):
         core[i, i, 0] = 1
     cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def hamming_eq_mask(N, weight, invert=False, loss=0):
@@ -153,7 +153,8 @@ def hamming_eq_mask(N, weight, invert=False, loss=0):
         new_core[-1, count_i, 0] = loss_step
         cores[-1] = new_core
 
-    return tt.vector.from_list(cores)
+#     return tt.vector.from_list(cores)
+    return cores
 
 
 def hamming_le_mask(N, weight, invert=False):
@@ -196,7 +197,7 @@ def hamming_le_mask(N, weight, invert=False):
         core[weight, count_i, 0] = 0
         cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def hamming_lt_mask(N, weight, invert=False):
@@ -249,7 +250,7 @@ def hamming_ge_mask(N, weight, invert=False):
         core[weight, count_i, 0] = 1
         cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def hamming_gt_mask(N, weight, invert=False):
@@ -288,7 +289,7 @@ def lness_len(N):
     core[:, 1, 0] = [-(N-1.0),-1, 0, N]
     cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def lness_le_mask(N, length):
@@ -336,7 +337,7 @@ def lness_le_mask(N, length):
         # print('CoreNI\n', core[:,0,:], '\n\t -- 1 --\n', core[:,1,:], '\n\t ===== \n')
         cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def lness_state(N):
@@ -382,4 +383,4 @@ def lness_state(N):
     #     print(core[:,i,:], '\n\t -- {} --\n'.format(i+1))
     cores.append(core)
 
-    return tt.vector.from_list(cores)
+    return cores

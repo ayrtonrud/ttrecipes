@@ -32,9 +32,9 @@ import time
 import teneva
 import scipy
 import scipy.sparse
-import sparse
-import util
-from util import nr
+from ttrecipes.core import sparse
+from ttrecipes.core import util
+from ttrecipes.core.util import nr
 
 #import ttrecipes as tr
 

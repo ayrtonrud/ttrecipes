@@ -25,7 +25,7 @@ Visualization of TT tensors using matplotlib
 from __future__ import (absolute_import, division,
                         print_function, unicode_literals, )
 import numpy as np
-import tt
+#import tt
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button

@@ -25,10 +25,10 @@ from future.builtins import range
 import time
 import numpy as np
 import teneva
-import util
-from multifuncrs2 import multifuncrs2
+from ttrecipes.core import util
+from ttrecipes.core.multifuncrs2 import multifuncrs2
 
-# import ttrecipes as tr
+#import ttrecipes as tr
 
 
 def cross(ticks_list, fun, mode="array", qtt=False, callback=None, return_n_samples=False, stats=False, eps=1e-3, verbose=False,
@@ -141,11 +141,20 @@ def cross(ticks_list, fun, mode="array", qtt=False, callback=None, return_n_samp
         print("Cross-approximating a {}D function with target error {}...".format(N, eps))
         start = time.time()
     result = multifuncrs2(grids, f, eps=eps, verb=verbose, **kwargs)
+    n, r = util.nr(result)
+    d = len(result)
+    ps = np.cumsum(np.concatenate(([1], n * r[0:d] * r[1:d+1])))
+    ps = ps.astype(int)
+    
     if verbose:
         total_time = time.time() - start
         print('Function evaluations: {} in {} seconds (time/evaluation: {})'.format(n_samples, total_time, total_time /
         n_samples))
-        print('The resulting tensor has ranks {} and {} elements'.format([r for r in result.r], len(result.core)))
+#         print('The resulting tensor has ranks {} and {} elements'.format([r for r in result.r], len(result.core)))
+        core_ = []
+        for term in result:
+            core_.extend(term.flatten())
+        print('The resulting tensor has ranks {} and {} elements'.format([r for r in r], len(core_)))
     if stats:
         import matplotlib.pyplot as plt
         all_Xs = np.array(all_Xs)

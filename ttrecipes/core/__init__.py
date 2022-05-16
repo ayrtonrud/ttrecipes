@@ -11,3 +11,5 @@ from .sampling import *
 from .sets import *
 from .sparse import *
 from .util import *
+from .multifuncrs2 import *
+from .tt_min import *

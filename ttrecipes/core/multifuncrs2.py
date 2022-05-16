@@ -7,8 +7,7 @@ import teneva
 from teneva import maxvol
 import copy
 from numpy import arange
-from util import nr
-
+from ttrecipes.core.util import nr
 
 def reshape(a, size):
     return np.reshape(a, size, order='F')
@@ -71,7 +70,8 @@ def multifuncrs2(X, funs, eps=1e-6,
         wasrand = True
     else:  # Initial guess available
         y = y0.copy()
-        _,ry = nr(y).copy()
+#         _, ry = nr(y).copy()
+        _,ry = nr(y)
     # Error vector
     z = teneva.rand(n, kickrank) # from teneva 
     _,rz = nr(z)

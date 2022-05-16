@@ -33,7 +33,7 @@ import teneva
 import scipy.interpolate
 import scipy.fftpack
 import scipy.sparse as sps
-
+from ttrecipes.core import tt_min
 #import ttrecipes as tr
 
 
@@ -362,8 +362,8 @@ def tt_dot(t1, t2):
         Vcore = cores2[mu]
         return np.dot(right_unfolding(Ucore), right_unfolding(Vcore).T)
 
-    cores1 = tt.vector.to_list(t1)
-    cores2 = tt.vector.to_list(t2)
+    cores1 = t1
+    cores2 = t2
     d = len(cores1)
     assert len(cores2) == d
     assert all([cores1[dim].shape[1] == cores2[dim].shape[1] for dim in range(d)])
@@ -477,7 +477,7 @@ def insert_dummies(t, modes, shape=1):
         # else:
         #     rright = newcores[n+1].shape[0]
         # newcores[n] = np.ones([rleft, sh, rright])
-    return tt.vector.from_list(newcores)
+    return newcores
 
 
 def squeeze(t, modes=None):
@@ -559,7 +559,7 @@ def random_tt(shape, ranks=1):
     cores = []
     for i in range(len(shape)):
         cores.append(np.random.rand(ranks[i], shape[i], ranks[i + 1]))
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def constant_tt(shape, fill=1):
@@ -575,7 +575,7 @@ def constant_tt(shape, fill=1):
     cores = [np.ones([1, shape[0], 1]) * fill]
     for i in range(1, len(shape)):
         cores.append(np.ones([1, shape[i], 1]))
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def separable_tt(ticks_list):
@@ -587,7 +587,8 @@ def separable_tt(ticks_list):
 
     """
 
-    return tt.vector.from_list([ticks[np.newaxis, :, np.newaxis] for ticks in ticks_list])
+#     return tt.vector.from_list([ticks[np.newaxis, :, np.newaxis] for ticks in ticks_list])
+    return [ticks[np.newaxis, :, np.newaxis] for ticks in ticks_list]
 
 
 def gaussian_tt(shape, sigmas):
@@ -655,7 +656,7 @@ def sum(t, modes=None, keepdims=False):
         if keepdims:
             return t
         else:
-            return tr.core.squeeze(t, modes=modes)
+            return squeeze(t, modes=modes)
 
 
 def mean(t):
@@ -667,7 +668,7 @@ def mean(t):
 
     """
 
-    return tr.core.sum(t) / np.prod(t.n)
+    return teneva.mean(t)
 
 
 def sum_repeated(Xs, ys):
@@ -737,7 +738,7 @@ def minimize(t, verbose=False, **kwargs):
     Wrapper for ttpy's great min_tens function
     """
 
-    val, point = tt.optimize.tt_min.min_tens(t, verb=verbose, **kwargs)
+    val, point = tt_min.min_tens(t, verb=verbose, **kwargs)
     return val, point
 
 
@@ -746,7 +747,7 @@ def maximize(t, verbose=False, **kwargs):
     Wrapper for ttpy's great min_tens function
     """
 
-    val, point = tt.optimize.tt_min.min_tens(-t, verb=verbose, **kwargs)
+    val, point = tt_min.min_tens(teneva.mul(t,-1), verb=verbose, **kwargs)
     return -val, point
 
 
@@ -798,7 +799,7 @@ def derive(t, modes=None, order=1):
 
     """
 
-    N = t.d
+    N = len(t)
     if modes is None:
         modes = np.arange(N)
     if not hasattr(modes, '__len__'):
@@ -806,11 +807,11 @@ def derive(t, modes=None, order=1):
     assert len(modes) <= N
     assert np.min(modes) >= 0 and np.max(modes) < N
 
-    cores = tt.vector.to_list(t)
+    cores = t
     for n in range(N):
         if n in modes:
             cores[n] = np.diff(cores[n], n=order, axis=1)
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def transpose(t, order, **kwargs):
@@ -818,19 +819,19 @@ def transpose(t, order, **kwargs):
     Like NumPy's transpose(). Uses cross-approximation
     """
 
-    ticks_list = [np.arange(t.n[n]) for n in range(t.d)]
+    ticks_list = [np.arange(util.nr(t)[0][n]) for n in range(len(t))]
     ticks_list = [ticks_list[o] for o in order]
 
     def fun(Xs):
         Xs = Xs.copy()
         Xs = Xs[:, np.argsort(order)]
-        return tr.core.sparse_reco(t, Xs)
+        return sparse.sparse_reco(t, Xs)
 
-    return tr.core.cross(ticks_list=ticks_list, fun=fun, **kwargs)
+    return cross.cross(ticks_list=ticks_list, fun=fun, **kwargs)
 
 
 def transpose(t, order, eps):
-    N = t.d
+    N = len(t)
     idx = np.empty(len(order))
     idx[order] = np.arange(len(order))
 
@@ -862,7 +863,7 @@ def shift_mode(t, n, shift, eps=1e-3, mode='swap', **kwargs):
 
     """
 
-    N = t.d
+    N = len(t)
     assert 0 <= n + shift < N
     assert mode in ('cross', 'swap')
 
@@ -908,7 +909,7 @@ def shift_mode(t, n, shift, eps=1e-3, mode='swap', **kwargs):
         newR2 = left.shape[1]
         cores[c1] = np.reshape(left, [R1, I2, newR2])
         cores[c2] = np.reshape(right, [newR2, I1, R3])
-    return tt.vector.from_list(cores)
+    return cores
 
 
 def stack(ts, axis, **kwargs):

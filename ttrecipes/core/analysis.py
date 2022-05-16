@@ -28,11 +28,11 @@ from future.builtins import range
 
 import numpy as np
 import teneva
-import tt_min
-import util
-from multifuncrs2 import multifuncrs2, nr
+from ttrecipes.core import tt_min
+from ttrecipes.core import util
+from ttrecipes.core.multifuncrs2 import multifuncrs2, nr
 import copy
-import masks
+from ttrecipes.core import masks
 
 #import ttrecipes as tr
 

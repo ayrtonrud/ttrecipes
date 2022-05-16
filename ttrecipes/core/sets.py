@@ -26,38 +26,51 @@ from __future__ import (absolute_import, division,
                         print_function, unicode_literals)
 
 import numpy as np
-import tt
-import tt.optimize.tt_min as tt_min
-
-import ttrecipes as tr
+#import tt
+from ttrecipes.core import teneva,tt_min
+from ttrecipes.core import masks
+from ttrecipes.core import util
+from ttrecipes.core.util import nr
+from ttrecipes.core import sparse
+from ttrecipes.core import multifuncrs2
+#import ttrecipes as tr
 
 
 def complement(t):
-    return tt.vector.from_list([np.concatenate([core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])  # Swap the two slices of each core
+    #return tt.vector.from_list([np.concatenate([core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])  # Swap the two slices of each core
+    return [np.concatenate([core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in t]  # Swap the two slices of each core
 
 
 def to_superset(t):
-    return tt.vector.from_list([np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # The first slice becomes the sum of both
+    #return tt.vector.from_list([np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # The first slice becomes the sum of both
+    return [np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in t]  # The first slice becomes the sum of both
 
 
 def from_superset(t):
-    return tt.vector.from_list([np.concatenate([core[:, 0:1, :] - core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])
+    #return tt.vector.from_list([np.concatenate([core[:, 0:1, :] - core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])
+    return [np.concatenate([core[:, 0:1, :] - core[:, 1:2, :], core[:, 1:2, :]], axis=1) for core in t]
 
 
 def to_lower(t):
-    return tt.vector.from_list([np.concatenate([core[:, 0:1, :], core[:, 0:1, :] + core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # The second slice becomes the sum of both
+    #return tt.vector.from_list([np.concatenate([core[:, 0:1, :], core[:, 0:1, :] + core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # The second slice becomes the sum of both
+    return [np.concatenate([core[:, 0:1, :], core[:, 0:1, :] + core[:, 1:2, :]], axis=1) for core in t]  # The second slice becomes the sum of both
 
 
 def from_lower(t):
-    return tt.vector.from_list([np.concatenate([core[:, 0:1, :], core[:, 1:2, :] - core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])
+    #return tt.vector.from_list([np.concatenate([core[:, 0:1, :], core[:, 1:2, :] - core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])
+    return [np.concatenate([core[:, 0:1, :], core[:, 1:2, :] - core[:, 0:1, :]], axis=1) for core in t]
 
 
 def to_upper(t):
-    return tt.vector.from_list([np.ones([1, sh, 1]) for sh in t.n]) - tt.vector.from_list([np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])  # 1 - the lower's complement
+    #return tt.vector.from_list([np.ones([1, sh, 1]) for sh in t.n]) - tt.vector.from_list([np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t)])  # 1 - the lower's complement
+    n,r = nr(t)
+    return teneva.sub([np.ones([1, sh, 1]) for sh in n], [np.concatenate([core[:, 0:1, :] + core[:, 1:2, :], core[:, 0:1, :]], axis=1) for core in t])  # 1 - the lower's complement
 
 
 def from_upper(t):
-    return tt.vector.from_list([np.ones([1, sh, 1]) for sh in t.n]) - tt.vector.from_list([np.concatenate([core[:, 1:2, :], core[:, 0:1, :] - core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # 1 - the complement's from_lower
+    #return tt.vector.from_list([np.ones([1, sh, 1]) for sh in t.n]) - tt.vector.from_list([np.concatenate([core[:, 1:2, :], core[:, 0:1, :] - core[:, 1:2, :]], axis=1) for core in tt.vector.to_list(t)])  # 1 - the complement's from_lower
+    n,r = nr(t)
+    return teneva.sub([np.ones([1, sh, 1]) for sh in n], [np.concatenate([core[:, 1:2, :], core[:, 0:1, :] - core[:, 1:2, :]], axis=1) for core in t])  # 1 - the complement's from_lower
 
 
 def largest_k_tuple(t, k, verbose=False, **kwargs):
@@ -69,13 +82,13 @@ def largest_k_tuple(t, k, verbose=False, **kwargs):
     :return: (a vector, its value)
 
     """
-
+    n,r = nr(t)
     assert k >= 1
-    assert np.all(t.n == 2)
+    assert np.all(n == 2)
 
-    N = t.d
-    weighted = t * tr.core.hamming_eq_mask(N, k, loss=1e-6)
-    val, point = tr.core.maximize(weighted, verbose=verbose, **kwargs)
+    N = len(t)
+    weighted = teneva.mul(t,masks.hamming_eq_mask(N, k, loss=1e-6))
+    val, point = util.maximize(weighted, verbose=verbose, **kwargs)
     return np.where(point)[0], val
 
 
@@ -89,9 +102,10 @@ def set_dump(t, min_order=1, max_order=1):
 
     """
 
-    assert np.all(t.n == 2)
-    assert 0 <= min_order <= t.d
-    assert min_order <= max_order <= t.d
+    n,r = nr(t)
+    assert np.all(n == 2)
+    assert 0 <= min_order <= len(t)
+    assert min_order <= max_order <= len(t)
     inds = {}
     strings = []
 
@@ -118,15 +132,15 @@ def set_choose(t, modes):
     :return:
 
     """
-
-    assert np.all(t.n == 2)
+    n,r = nr(t)
+    assert np.all(n == 2)
 
     if not hasattr(modes, '__len__'):
         modes = [modes]
-    index = [0, ]*t.d
+    index = [0, ]*len(t)
     for mode in modes:
         index[mode] = 1
-    return t[index]
+    return util.getitem(t,index)
 
 
 def cardinality_deviation(t):
@@ -142,11 +156,11 @@ def cardinality_deviation(t):
 
     """
 
-    N = t.d
-    total = tr.core.sum(t)
-    singletons = tr.core.sparse_reco(t, np.eye(N))
+    N = len(t)
+    total = util.sum(t)
+    singletons = sparse.sparse_reco(t, np.eye(N))
     cores = [np.concatenate([(1 - singletons[n]/total)[np.newaxis, np.newaxis, np.newaxis], (singletons[n]/total)[np.newaxis, np.newaxis, np.newaxis]], axis=1) for n in range(N)]
-    return t*(1/total) - tt.vector.from_list(cores)
+    return teneva.sub(t*(1/total), cores)
 
 
 def mean_dimension_tensor(t, eps=1e-6, verbose=False, **kwargs):
@@ -158,15 +172,15 @@ def mean_dimension_tensor(t, eps=1e-6, verbose=False, **kwargs):
 
     """
 
-    N = t.d
+    N = len(t)
 
-    ct = tr.core.to_superset(t)
-    ct = tt.vector.from_list([core[:, [0, 0, 1], :] for core in tt.vector.to_list(ct)])
+    ct = to_superset(t)
+    ct = [core[:, [0, 0, 1], :] for core in ct]
 
-    t = tt.vector.from_list([core[:, [0, 1, 1], :] for core in tt.vector.to_list(t)])
+    t = [core[:, [0, 1, 1], :] for core in t]
 
-    w = tr.core.hamming_weight(N)
-    w = tt.vector.from_list([core[:, [0, 1, 1], :] for core in tt.vector.to_list(w)])
+    w = masks.hamming_weight(N)
+    w = [core[:, [0, 1, 1], :] for core in w]
 
     def fun(Xs):
         result = np.zeros(len(Xs))
@@ -174,8 +188,8 @@ def mean_dimension_tensor(t, eps=1e-6, verbose=False, **kwargs):
         result[idx] = Xs[idx, 0]*Xs[idx, 1]/Xs[idx, 2]
         return result
 
-    t = tt.multifuncrs2([t, w, ct], fun, eps=eps, verb=verbose, **kwargs)
-    t = tt.vector.from_list([np.concatenate([np.sum(core[:, 0:2, :], axis=1, keepdims=True), core[:, 2:3, :]], axis=1) for core in tt.vector.to_list(t)])
+    t = multifuncrs2.multifuncrs2([t, w, ct], fun, eps=eps, verb=verbose, **kwargs)
+    t = [np.concatenate([np.sum(core[:, 0:2, :], axis=1, keepdims=True), core[:, 2:3, :]], axis=1) for core in t]
     return t.round(eps=0)
 
 
@@ -234,9 +248,9 @@ def order_query(t, min_order=0, max_order=1, include=(), exclude=(), k=None, thr
 
     """
 
-    N = t.d
-    tuples = tr.core.power_set(N, min_order=min_order, max_order=max_order, include=include, exclude=exclude)
-    tuples = [(tuple, tr.core.set_choose(t, tuple)) for tuple in tuples]
+    N = len(d)
+    tuples = power_set(N, min_order=min_order, max_order=max_order, include=include, exclude=exclude)
+    tuples = [(tuple, set_choose(t, tuple)) for tuple in tuples]
     if threshold is not None:
         tuples = [tuple for tuple in tuples if tuple[1] >= threshold]
     if k is not None and len(tuples) > k:
@@ -244,3 +258,4 @@ def order_query(t, min_order=0, max_order=1, include=(), exclude=(), k=None, thr
         idx = np.argsort(all_values)
         tuples = [tuples[i] for i in idx[-k:]]
     return tuples
+

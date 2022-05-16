@@ -27,13 +27,16 @@ from __future__ import (absolute_import, division,
 from future.builtins import range
 
 import numpy as np
-import tt
+import teneva
 import scipy
+from ttrecipes.core import cross
+from ttrecipes.core import util
+from ttrecipes.core import compression
 
-import ttrecipes as tr
+# import ttrecipes as tr
 
 
-def marginals(t):
+def marginals_(t):
     """
     Return all N marginals from an N-dimensional PDF
 
@@ -42,14 +45,17 @@ def marginals(t):
 
     """
 
-    N = t.d
-    cores = tt.vector.to_list(t)
+#     N = t.d
+    N = len(t)
+#     cores = tt.vector.to_list(t)
+    cores = t
     summed = [np.sum(core, axis=1, keepdims=True) for core in cores]
     result = []
     for i in range(N):
         tmp = summed[i]
         summed[i] = cores[i]
-        result.append(np.squeeze(tr.core.squeeze(tt.vector.from_list(summed)).full()))
+#         result.append(np.squeeze(util.squeeze(tt.vector.from_list(summed)).full()))
+        result.append(np.squeeze(teneva.full(util.squeeze(summed))))
         result[-1] /= np.sum(result[-1])  # Must sum 1
         summed[i] = tmp
     return result
@@ -60,22 +66,28 @@ def fit_to_marginals(t, marginals):
     Given a copula in the TT format and a list of associated marginal PDFs (vectors), compute the equivalent joint PDF
     """
 
-    N = t.d
-    cores = tt.vector.to_list(t * (1./tr.core.sum(t)))
-    curs = tr.core.marginals(t)
+#     N = t.d
+    N = len(t)
+#     cores = tt.vector.to_list(t * (1./tr.core.sum(t)))
+    cores = teneva.mul(t, (1./util.sum(t)))
+#     curs = tr.core.marginals(t)
+    curs = marginals_(t)
     newcores = []
+    n, r = util.nr(t)
     for i, core in enumerate(cores):
         marg = marginals[i]/np.sum(marginals[i])
         cmarg = np.concatenate([np.array([0]), np.cumsum(marg)])
         cur = curs[i]
-        I = t.n[i]
+#         I = t.n[i]
+        I = n[i]
         ccur = np.concatenate([np.array([0]), np.cumsum(cur)])
         interp = scipy.interpolate.interp1d(ccur, np.linspace(0, 1, I+1), assume_sorted=True, fill_value='extrapolate')(cmarg)
         ccore = np.concatenate([np.zeros([core.shape[0], 1, core.shape[2]]), np.cumsum(core, axis=1)], axis=1)
         interpcore = scipy.interpolate.interp1d(np.linspace(0, 1, I+1), ccore, axis=1, assume_sorted=True, fill_value='extrapolate')
         interpcore = interpcore(interp)
         newcores.append(np.diff(interpcore, axis=1))
-    return tt.vector.from_list(newcores)
+#     return tt.vector.from_list(newcores)
+    return newcores
 
 
 def corr_to_pdf(corr, marginals, fraction=1e-4, eps=1e-6, verbose=False, **kwargs):
@@ -105,8 +117,12 @@ def corr_to_pdf(corr, marginals, fraction=1e-4, eps=1e-6, verbose=False, **kwarg
 
     normdist = scipy.stats.norm(0, 1)
     ticks_list = [np.linspace(normdist.ppf(fraction/2), normdist.ppf(1-fraction/2), len(marginals[i])) for i in range(N)]
-    copula = tr.core.cross(ticks_list, fun, mode='array', eps=eps, verbose=verbose, **kwargs)
+#     copula = tr.core.cross(ticks_list, fun, mode='array', eps=eps, verbose=verbose, **kwargs)
+    copula = cross.cross(ticks_list, fun, mode='array', eps=eps, verbose=verbose, **kwargs)
+    
 
-    pdf = tr.core.fit_to_marginals(copula, marginals).round(eps)
-    pdf *= (1./tr.core.sum(pdf))
+#     pdf = tr.core.fit_to_marginals(copula, marginals).round(eps)
+    pdf = teneva.truncate(fit_to_marginals(copula, marginals), e=eps)
+#     pdf *= (1./tr.core.sum(pdf))
+    pdf = teneva.mul(pdf, (1./util.sum(pdf)))
     return pdf, copula

@@ -27,7 +27,8 @@ from __future__ import (absolute_import, division,
 from future.builtins import range
 
 import numpy as np
-import tt
+# import tt
+import teneva
 import time
 
 
@@ -44,7 +45,8 @@ def sparse_reco(t, Xs):
     P = Xs.shape[0]
     Xs = Xs.astype(int)
     lefts = np.ones([P, 1])
-    for i, core in enumerate(tt.vector.to_list(t)):
+#     for i, core in enumerate(tt.vector.to_list(t)):
+    for i, core in enumerate(t):
         lefts = np.einsum('jk,kjl->jl', lefts, core[:, Xs[:, i]])
     return np.squeeze(lefts)
 
@@ -148,4 +150,5 @@ def sparse_tt_svd(Xs, ys, eps, shape=None, rmax=np.iinfo(np.int32).max, verbose=
     lastcore[list(Xs.T)] = ys
     cores.append(lastcore[:, :, np.newaxis])
 
-    return tt.vector.from_list(cores)
+#     return tt.vector.from_list(cores)
+    return cores

@@ -40,6 +40,7 @@ import numpy as np
 import collections
 import scipy as sp
 import scipy.stats
+import teneva
 
 
 def parse_axes(axes, default_bins, dist_fraction=1e-4/2):

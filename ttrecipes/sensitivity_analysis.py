@@ -36,6 +36,9 @@ import itertools
 import pprint
 import random
 import time
+from ttrecipes import models
+from ttrecipes.core import cross,sparse,util,sensitivity_indices,sets,masks
+from ttrecipes.core.multifuncrs2 import multifuncrs2
 
 import numpy as np
 import scipy as sp
@@ -48,8 +51,9 @@ except ImportError:
     matplotlib = None
     plt = None
 
-import tt
-import ttrecipes as tr
+# import tt
+# import ttrecipes as tr
+import teneva
 
 
 def var_metrics(fun=None, axes=None, t=None, default_bins=100, effective_threshold=0.95,
@@ -173,7 +177,7 @@ def var_metrics(fun=None, axes=None, t=None, default_bins=100, effective_thresho
         assert fun is not None
         assert axes is not None
     N = len(axes)
-    names, ticks_list, marginals = tr.models.parse_axes(
+    names, ticks_list, marginals = models.parse_axes(
         axes, default_bins=default_bins, dist_fraction=dist_fraction)
 
     axes = list(zip(names, ticks_list, marginals))
@@ -187,14 +191,18 @@ def var_metrics(fun=None, axes=None, t=None, default_bins=100, effective_thresho
 
     if verbose:
         print("\n-> Building surrogate model")
-    pdf = tt.vector.from_list([marg[np.newaxis, :, np.newaxis] for marg in marginals])
+#     pdf = tt.vector.from_list([marg[np.newaxis, :, np.newaxis] for marg in marginals])
+    pdf = [marg[np.newaxis, :, np.newaxis] for marg in marginals]
 
     def fun_premultiplied(Xs):
-        return fun(Xs) * tr.core.sparse_reco(pdf, tr.core.coordinates_to_indices(Xs, ticks_list=ticks_list))
+        return fun(Xs) * sparse.sparse_reco(pdf, util.coordinates_to_indices(Xs, ticks_list=ticks_list))
 
     if t is None:
         model_time = time.time()
-        tt_pdf, n_samples = tr.core.cross(ticks_list, fun_premultiplied, mode=fun_mode,
+#         tt_pdf, n_samples = tr.core.cross(ticks_list, fun_premultiplied, mode=fun_mode,
+#                                           return_n_samples=True, eps=eps, verbose=verbose,
+#                                           **cross_kwargs)
+        tt_pdf, n_samples = cross(ticks_list, fun_premultiplied, mode=fun_mode,
                                           return_n_samples=True, eps=eps, verbose=verbose,
                                           **cross_kwargs)
         model_time = time.time() - model_time
@@ -206,25 +214,27 @@ def var_metrics(fun=None, axes=None, t=None, default_bins=100, effective_thresho
     if verbose:
         print("\n-> Computing sensitivity metrics")
     sa_time = time.time()
-    st = tr.core.sobol_tt(tt_pdf, pdf=pdf, premultiplied=True, eps=eps,
+#     st = tr.core.sobol_tt(tt_pdf, pdf=pdf, premultiplied=True, eps=eps,
+#                           verbose=verbose, **cross_kwargs)
+    st = sensitivity_indices.sobol_tt(tt_pdf, pdf=pdf, premultiplied=True, eps=eps,
                           verbose=verbose, **cross_kwargs)
 
-    tst = tr.core.to_upper(st)
-    cst = tr.core.to_lower(st)
-    sst = tr.core.to_superset(st)
-    dim, var = tr.core.effective_dimension(st, effective_threshold, 'truncation')
-    indices, _ = tr.core.largest_k_tuple(cst, dim)
-    shapley_values = tr.core.semivalues(cst, ps='shapley')
-    banzhaf_coleman_values = tr.core.semivalues(cst, ps='banzhaf-coleman')
+    tst = sets.to_upper(st)
+    cst = sets.to_lower(st)
+    sst = sets.to_superset(st)
+    dim, var = sensitivity_indices.effective_dimension(st, effective_threshold, 'truncation')
+    indices, _ = sets.largest_k_tuple(cst, dim)
+    shapley_values = sensitivity_indices.semivalues(cst, ps='shapley')
+    banzhaf_coleman_values = sensitivity_indices.semivalues(cst, ps='banzhaf-coleman')
 
     metrics = dict()
     metrics['variables'] = names
-    metrics['dimension_distribution'] = tr.core.dimension_distribution(st)
+    metrics['dimension_distribution'] = sensitivity_indices.dimension_distribution(st)
     metrics['mean_dimension'] = metrics['dimension_distribution'].dot(np.arange(1, N + 1))
-    metrics['effective_superposition'] = tr.core.effective_dimension(
+    metrics['effective_superposition'] = sensitivity_indices.effective_dimension(
         st, effective_threshold, 'superposition')
     metrics['effective_truncation'] = (dim, var, indices)
-    metrics['effective_successive'] = tr.core.effective_dimension(
+    metrics['effective_successive'] = sensitivity_indices.effective_dimension(
         st, effective_threshold, 'successive')
     metrics['effective_threshold'] = effective_threshold
     sa_time = time.time() - sa_time
@@ -299,10 +309,10 @@ def collect_sobol(metrics, max_order):
 
         for idx in itertools.combinations(list(range(N)), order):
             key = tuple(names[i] for i in idx)
-            collected['sobol_indices'][order][key] = tr.core.set_choose(st, idx)
-            collected['total_sobol_indices'][order][key] = tr.core.set_choose(tst, idx)
-            collected['closed_sobol_indices'][order][key] = tr.core.set_choose(cst, idx)
-            collected['superset_sobol_indices'][order][key] = tr.core.set_choose(sst, idx)
+            collected['sobol_indices'][order][key] = sets.set_choose(st, idx)
+            collected['total_sobol_indices'][order][key] = sets.set_choose(tst, idx)
+            collected['closed_sobol_indices'][order][key] = sets.set_choose(cst, idx)
+            collected['superset_sobol_indices'][order][key] = sets.set_choose(sst, idx)
 
     metrics.update(collected)
 
@@ -457,7 +467,7 @@ def query_sobol(st, include=(), exclude=(), min_order=1, max_order=None,
         (tuple, value): the best variables, and their index
 
     """
-    if isinstance(st, tt.core.vector.vector):
+    if isinstance(st, list):
         st = st
         names = None
     elif isinstance(st, dict) and '_tr_info' in st and 'stt' in st['_tr_info']['tags']:
@@ -469,15 +479,15 @@ def query_sobol(st, include=(), exclude=(), min_order=1, max_order=None,
     else:
         raise ValueError("'STT' must be a ttpy vector or a 'metrics' object")
 
-    N = st.d
+    N = len(st)
     if max_order is None:
         max_order = N
     if index_type == 'closed':
-        st = tr.core.to_lower(st)
+        st = sets.to_lower(st)
     elif index_type == 'total':
-        st = tr.core.to_upper(st)
+        st = sets.to_upper(st)
     elif index_type == 'superset':
-        st = tr.core.to_superset(st)
+        st = sets.to_superset(st)
     elif index_type != 'standard':
         raise ValueError("index_type must be 'standard', 'closed', 'total' or 'superset'")
 
@@ -485,34 +495,34 @@ def query_sobol(st, include=(), exclude=(), min_order=1, max_order=None,
     mask1 = [np.array([1, 1])[np.newaxis, :, np.newaxis] for n in range(N)]
     for n in include:
         mask1[n] = np.array([0, 1])[np.newaxis, :, np.newaxis]
-    mask1 = tt.vector.from_list(mask1)
+    mask1 = mask1
 
     # Second mask: tuples that must be excluded
     mask2 = [np.array([1, 1])[np.newaxis, :, np.newaxis] for n in range(N)]
     for n in exclude:
         mask2[n] = np.array([1, 0])[np.newaxis, :, np.newaxis]
-    mask2 = tt.vector.from_list(mask2)
+    mask2 = mask2
 
-    mask12 = mask1*mask2
-    mask12 = mask12 - tr.core.hamming_weight(N)*eps  # Tiny gradient to follow
+    mask12 = teneva.mul(mask1,mask2)
+    mask12 = teneva.sub(mask12,teneva.mul(masks.hamming_weight(N),eps))  # Tiny gradient to follow
 
     # Last mask: order bounds
-    hws = tr.core.hamming_weight_state(N)
-    cores = tt.vector.to_list(hws)
+    hws = masks.hamming_weight_state(N)
+    cores = hws
     cores[-1][:, :min_order, :] = 0
     cores[-1][:, max_order+1:, :] = 0
     cores[-1] = np.sum(cores[-1], axis=1, keepdims=True)
-    mask3 = tr.core.squeeze(tt.vector.from_list(cores))
-    mask3 = tt.vector.round(mask3, eps=0)
+    mask3 = util.squeeze(cores)
+    mask3 = teneva.truncate(mask3, e=0)
 
     if mode == 'highest':
-        st = tt.multifuncrs2([st, mask3], lambda x: x[:, 0] * x[:, 1],
-                             eps=eps, verb=verbose, **kwargs) * mask12
-        val, point = tr.core.maximize(st)
+        st = teneva.mul(multifuncrs2([st, mask3], lambda x: x[:, 0] * x[:, 1],
+                             eps=eps, verb=verbose, **kwargs),mask12)
+        val, point = util.maximize(st)
     elif mode == 'lowest':  # Shift down by one so that the masks' zeroing-out works as intended
-        st = tt.multifuncrs2([st - tr.core.constant_tt(st.n), mask3], lambda x: x[:, 0] * x[:, 1],
-                             eps=eps, verb=verbose, **kwargs) * mask12
-        val, point = tr.core.minimize(st)
+        st = teneva.mul(multifuncrs2([teneva.sub(st,util.constant_tt(util.nr(st)[0])), mask3], lambda x: x[:, 0] * x[:, 1],
+                             eps=eps, verb=verbose, **kwargs),mask12)
+        val, point = util.minimize(st)
         val += 1  # Shift the value back up
     else:
         raise ValueError("Mode must be either 'highest' or 'lowest'")

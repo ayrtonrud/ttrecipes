@@ -25,9 +25,16 @@ from future.builtins import range
 import numpy as np
 import scipy as sp
 import scipy.signal
-import tt
+from ttrecipes.core import util
+from ttrecipes.core.multifuncrs2 import multifuncrs2
+from ttrecipes.core.util import nr
+from ttrecipes.core import masks
+from ttrecipes.core import sets
 
-import ttrecipes as tr
+# import tt
+
+# import ttrecipes as tr
+import teneva
 
 
 def sobol_tt(t, pdf=None, premultiplied=False, eps=1e-6, verbose=False, **kwargs):
@@ -45,11 +52,13 @@ def sobol_tt(t, pdf=None, premultiplied=False, eps=1e-6, verbose=False, **kwargs
 
     """
 
-    N = t.d
-    if hasattr(pdf, '__len__'):
-        pdf = tr.core.separable_tt(pdf)
+#     N = t.d
+    N = len(t)
+    #if hasattr(pdf, '__len__'):
+    #    pdf = util.separable_tt(pdf)
+    #    print('Pdf1',len(pdf),nr(pdf),pdf[0].shape)
     if pdf is None:
-        pdf = tr.core.constant_tt(shape=t.n, fill=1./np.prod(t.n))  # A constant function that sums 1
+        pdf = tr.core.constant_tt(shape=nr(t)[0], fill=1./np.prod(nr(t)[0]))  # A constant function that sums 1
 
     if premultiplied:
         tpdf = t
@@ -57,21 +66,29 @@ def sobol_tt(t, pdf=None, premultiplied=False, eps=1e-6, verbose=False, **kwargs
         if np.max(pdf.r) == 1:
             tpdf = t*pdf
         else:
-            tpdf = tt.multifuncrs2([t, pdf], lambda x: x[:, 0] * x[:, 1], y0=t, eps=eps, verb=verbose, **kwargs)
-    t2 = tt.vector.from_list([np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in tt.vector.to_list(tpdf)])
+            tpdf = multifuncrs2([t, pdf], lambda x: x[:, 0] * x[:, 1], y0=t, eps=eps, verb=verbose, **kwargs)
+#     t2 = tt.vector.from_list([np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in tt.vector.to_list(tpdf)])
+    t2 = [np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in tpdf]
 
-    pdf2 = tt.vector.from_list([np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in tt.vector.to_list(pdf)])
+#     pdf2 = tt.vector.from_list([np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in tt.vector.to_list(pdf)])
+    pdf2 = [np.concatenate([np.sum(core, axis=1, keepdims=True), core], axis=1) for core in pdf]
 
     def fun(x):
         x[x[:, 1] == 0, 1] = float('inf')
         result = (x[:, 0]**2 / x[:, 1])
         return result
-    t_normalized_sq = tt.multifuncrs2([t2, pdf2], fun, y0=t2, eps=eps, verb=verbose, **kwargs)
+    
+#     t_normalized_sq = tt.multifuncrs2([t2, pdf2], fun, y0=t2, eps=eps, verb=verbose, **kwargs)
+    t_normalized_sq = multifuncrs2([t2, pdf2], fun, y0=t2, eps=eps, verb=verbose, **kwargs)
 
-    sobol = tt.vector.from_list([np.concatenate([core[:, 0:1, :], np.sum(core[:, 1:, :], axis=1, keepdims=True) - core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(t_normalized_sq)])
-    sobol *= (1. / (tr.core.sum(sobol) - sobol[[0, ]*N]))
-    correction = tt.vector.from_list([np.array([1, 0])[np.newaxis, :, np.newaxis], ]*N)  # Set first index to 0 for convenience
-    return (sobol - correction*sobol[[0, ]*N]).round(eps=0)
+#     sobol = tt.vector.from_list([np.concatenate([core[:, 0:1, :], np.sum(core[:, 1:, :], axis=1, keepdims=True) - core[:, 0:1, :]], axis=1) 
+    sobol = [np.concatenate([core[:, 0:1, :], np.sum(core[:, 1:, :], axis=1, keepdims=True) - core[:, 0:1, :]], axis=1) for core in t_normalized_sq]
+#     sobol *= (1. / (tr.core.sum(sobol) - sobol[[0, ]*N]))
+    sobol = teneva.mul(sobol, 1. / (util.sum(sobol.copy()) - teneva.get(sobol.copy(), [0, ]*N)))
+#     correction = tt.vector.from_list([np.array([1, 0])[np.newaxis, :, np.newaxis], ]*N)  # Set first index to 0 for convenience
+    correction = [np.array([1., 0.])[np.newaxis, :, np.newaxis], ]*N  # Set first index to 0 for convenience
+#     return teneva.sub(sobol, correction*util.getitem(sobol, index=[0, ]*N)).round(eps=0)
+    return teneva.truncate(teneva.sub(sobol, teneva.mul(correction,teneva.get(sobol, [0, ]*N))),e=0)
 
 
 def semivalues(game, ps, p=None):
@@ -92,7 +109,8 @@ def semivalues(game, ps, p=None):
 
     """
 
-    N = game.d
+#     N = game.d
+    N = len(game)
     if ps == 'shapley':
         ps = [1./(N*sp.special.binom(N-1, n)) for n in range(N)]
     elif ps == 'banzhaf-coleman':
@@ -106,22 +124,22 @@ def semivalues(game, ps, p=None):
     if not all([ps[n] >= 0 for n in range(N)]):
         raise ValueError('The `ps` must be regular')
 
-    cores = [np.concatenate([core[:, 0:2, :], core[:, 1:2, :] - core[:, 0:1, :]], axis=1) for core in tt.vector.to_list(game)]
-    game = tt.vector.from_list(cores)
+    cores = [np.concatenate([core[:, 0:2, :], core[:, 1:2, :] - core[:, 0:1, :]], axis=1) for core in game]
+    game = cores
 
-    ws = tr.core.hamming_weight_state(N)
-    ws_cores = tt.vector.to_list(ws)
+    ws = masks.hamming_weight_state(N)
+    ws_cores = ws
     ws_cores[-1][np.arange(N), np.arange(N), 0] = ps
     ws_cores[-2] = np.einsum('ijk,km->ijm', ws_cores[-2], np.sum(ws_cores[-1][:, :-1, :], axis=1))  # Absorb last core
     ws_cores = ws_cores[:-1]
     ws_cores = [np.concatenate([core, core[:, 0:1, :]], axis=1) for core in ws_cores]
-    ws = tt.vector.from_list(ws_cores)
+    ws = ws_cores
 
     result = []
     for n in range(N):
         idx = [slice(0, 2)]*N
         idx[n] = slice(2, 3)
-        result.append(np.asscalar(tr.core.tt_dot(game[idx], ws[idx])))
+        result.append(np.asscalar(util.tt_dot(util.getitem(game,idx), util.getitem(ws,idx))))
     return np.asarray(result)
 
 
@@ -136,8 +154,8 @@ def mean_dimension(st):
 
     """
 
-    h = tr.core.hamming_weight(st.d)
-    return tr.core.tt_dot(st, h)
+    h = masks.hamming_weight(len(st))
+    return util.tt_dot(st, h)
 
 
 def order_contribution(st, order, mode='eq'):
@@ -155,12 +173,12 @@ def order_contribution(st, order, mode='eq'):
         return 0
     assert mode in ('eq', 'le')
 
-    N = st.d
+    N = len(st)
     if mode == 'eq':
-        weighted = st * tr.core.hamming_eq_mask(N, order)
+        weighted = teneva.mul(st,masks.hamming_eq_mask(N, order))
     else:
-        weighted = st * tr.core.hamming_le_mask(N, order)
-    return np.squeeze(tr.core.squeeze(tt.vector.from_list([np.sum(core, axis=1, keepdims=True) for core in tt.vector.to_list(weighted)])).full())
+        weighted = teneva.mul(st,masks.hamming_le_mask(N, order))
+    return np.squeeze(teneva.full(util.squeeze([np.sum(core, axis=1, keepdims=True) for core in weighted])))
 
 
 def effective_dimension(st, threshold=0.95, mode='superposition'):
@@ -180,10 +198,9 @@ def effective_dimension(st, threshold=0.95, mode='superposition'):
     :return: an integer (the dimension) and a float (the variance attained)
 
     """
-
     assert 0 <= threshold <= 1
 
-    N = st.d
+    N = len(st)
     if mode == 'superposition':
         order = 1
         accum = 0
@@ -193,14 +210,14 @@ def effective_dimension(st, threshold=0.95, mode='superposition'):
                 break
         return order, accum
     elif mode == 'truncation':
-        closed = tr.core.to_lower(st)
+        closed = sets.to_lower(st)
         for order in range(1, N+1):
-            best = tr.core.largest_k_tuple(closed, order)
+            best = sets.largest_k_tuple(closed, order)
             if best[1] >= threshold:
                 return order, best[1]
     elif mode == 'successive':
         for order in range(1, N+1):
-            contribution = tr.core.tt_dot(st, tr.core.lness_le_mask(st.d, order)).item()
+            contribution = util.tt_dot(st, masks.lness_le_mask(len(st), order)).item()
             if contribution >= threshold:
                 return order, contribution
     else:
@@ -223,13 +240,13 @@ def dimension_distribution(st):
         """
         Advance the dot product computation towards the right
         """
-        Ucore = tr.core.ttm(cores1[mu], Rprod, mode=0, transpose=True)
+        Ucore = util.ttm(cores1[mu], Rprod, mode=0, transpose=True)
         Vcore = cores2[mu]
-        return np.dot(tr.core.left_unfolding(Ucore).T, tr.core.left_unfolding(Vcore))
+        return np.dot(util.left_unfolding(Ucore).T, util.left_unfolding(Vcore))
 
-    N = st.d
-    cores1 = tt.vector.to_list(st)
-    cores2 = tt.vector.to_list(tr.core.hamming_weight_state(N))
+    N = len(st)
+    cores1 = st
+    cores2 = masks.hamming_weight_state(N)
     d = len(cores1)
     Rprod = np.array([[1]])
     for mu in range(d):
